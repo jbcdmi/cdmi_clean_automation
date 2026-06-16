@@ -1,93 +1,68 @@
 @echo off
-setlocal EnableExtensions
-
 :: =====================================================
-:: Force Wallpaper + Lock Screen + Auto Reapply
-:: Windows 10
+::  Force Wallpaper Script - Silent + Auto Reset (Cleaned Up)
 :: =====================================================
 
-:: Check for Administrator
-net session >nul 2>&1
-if %errorlevel% neq 0 (
-echo Please run this script as Administrator.
-pause
-exit /b
-)
-
-:: Paths
+:: Detect current folder and set wallpaper path
 set "SCRIPT_DIR=%~dp0"
 set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
-set "WALLPAPER=%SCRIPT_DIR%\wallpaper.jpg"
-set "LOCKSCREEN=%SCRIPT_DIR%\lockscreen.jpg"
-set "BATCHFILE=%~f0"
+set "WALLPAPER=%SCRIPT_DIR%\wallpaper.png"
+set "BATCHFILE=%SCRIPT_DIR%\wallpaper.bat"
+set "REGKEY=HKCU\Control Panel\Desktop"
 set "VBSFILE=%SCRIPT_DIR%\wallpaper.vbs"
-set "TASKNAME=ForceWallpaperLock"
+set "TASKNAME=ForceDesktopWallpaper"
+set "STARTUP=%AppData%\Microsoft\Windows\Start Menu\Programs\Startup\wallpaper.lnk"
 
-echo =====================================
-echo Applying Wallpaper and Lock Screen...
-echo =====================================
+echo ======================================
+echo  Setting and Locking Desktop Wallpaper
+echo ======================================
 
-:: -------------------------------------------------
-:: Desktop Wallpaper
-:: -------------------------------------------------
+:: --- STEP 0: Cleanup any old startup shortcut to prevent double run
+if exist "%STARTUP%" (
+    del /f /q "%STARTUP%" >nul 2>&1
+    echo Removed old startup shortcut.
+)
 
-reg add "HKCU\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d "%WALLPAPER%" /f >nul
-reg add "HKCU\Control Panel\Desktop" /v WallpaperStyle /t REG_SZ /d 10 /f >nul
-reg add "HKCU\Control Panel\Desktop" /v TileWallpaper /t REG_SZ /d 0 /f >nul
+:: --- STEP 1: Force background type = Picture
+reg add "%REGKEY%" /v WallpaperType /t REG_DWORD /d 0 /f >nul
 
-:: Lock wallpaper changes
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop" ^
-/v NoChangingWallPaper /t REG_DWORD /d 1 /f >nul
+:: --- STEP 2: Overwrite wallpaper path (always)
+reg add "%REGKEY%" /v Wallpaper /t REG_SZ /d "%WALLPAPER%" /f >nul
 
-:: Refresh wallpaper
-RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
+:: --- STEP 3: Set style (2 = Fill)
+reg add "%REGKEY%" /v WallpaperStyle /t REG_SZ /d 2 /f >nul
+reg add "%REGKEY%" /v TileWallpaper /t REG_SZ /d 0 /f >nul
 
-:: -------------------------------------------------
-:: Lock Screen (Windows Pro recommended)
-:: -------------------------------------------------
+:: --- STEP 4: Force apply using PowerShell
+powershell -NoProfile -Command "Add-Type -Namespace Win32 -Name NativeMethods -MemberDefinition '[DllImport(\"user32.dll\",SetLastError=true)] public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);'; [Win32.NativeMethods]::SystemParametersInfo(20, 0, '%WALLPAPER%', 3)" 
 
-reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\Personalization" /f >nul
+echo Wallpaper applied successfully!
 
-reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\Personalization" ^
-/v LockScreenImage /t REG_SZ /d "%LOCKSCREEN%" /f >nul
-
-reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\Personalization" ^
-/v NoChangingLockScreen /t REG_DWORD /d 1 /f >nul
-
-:: -------------------------------------------------
-:: Create Hidden VBS Launcher
-:: -------------------------------------------------
-
+:: --- STEP 5: Create hidden VBS launcher with full absolute path
 (
-echo Set WshShell = CreateObject("WScript.Shell"^)
-echo WshShell.Run Chr(34^) ^& "%BATCHFILE%" ^& Chr(34^), 0, False
+    echo Set WshShell = CreateObject("WScript.Shell"^)
+    echo WshShell.CurrentDirectory = "C:\Windows\System32"
+    echo WshShell.Run """%BATCHFILE%""", 0, False
 ) > "%VBSFILE%"
 
-attrib +h "%VBSFILE%" >nul
-
-:: -------------------------------------------------
-:: Recreate Scheduled Task
-:: -------------------------------------------------
-
+:: --- STEP 6: Remove old scheduled task (avoid duplicates)
 schtasks /Delete /TN "%TASKNAME%" /F >nul 2>&1
 
-schtasks /Create ^
-/TN "%TASKNAME%" ^
-/TR "wscript.exe "%VBSFILE%"" ^
-/SC ONLOGON ^
-/RL HIGHEST ^
-/F >nul
+:: --- STEP 7: Create new scheduled task (runs silently at login)
+schtasks /Create /TN "%TASKNAME%" /TR "wscript.exe \"%VBSFILE%\"" /SC ONLOGON /RL HIGHEST /F >nul
 
-gpupdate /force >nul 2>&1
+echo Added Scheduled Task "%TASKNAME%" to apply wallpaper at every login!
 
-echo.
-echo =====================================
-echo Completed Successfully
-echo =====================================
-echo Wallpaper locked.
-echo Lock screen configured.
-echo Auto-reapply task installed.
-echo.
+:: --- STEP 8: Lock wallpaper settings
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop" /v NoChangingWallPaper /t REG_DWORD /d 1 /f >nul
+echo Wallpaper change locked!
 
+:: --- STEP 9: Hide the VBS file (optional)
+attrib +h "%VBSFILE%" >nul
+
+echo ======================================
+echo  DONE - Clean install complete
+echo  (No duplicates, runs silently on every restart)
+echo ======================================
 pause
 exit
