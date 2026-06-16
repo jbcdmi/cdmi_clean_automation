@@ -1,10 +1,6 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
-:: =====================================================
-::  Master Script - Cleanup, Unlock, Copy, Run
-:: =====================================================
-
 echo ======================================
 echo  STARTING MASTER AUTOMATION SCRIPT
 echo ======================================
@@ -14,11 +10,6 @@ echo ======================================
 :: ----------------------------
 echo [INFO] Removing scheduled task: PC_AutoCleanup ...
 schtasks /Delete /TN "PC_AutoCleanup" /F >nul 2>&1
-if %ERRORLEVEL%==0 (
-    echo [INFO] Task "PC_AutoCleanup" removed successfully.
-) else (
-    echo [WARN] Task "PC_AutoCleanup" not found or could not be removed.
-)
 
 :: ----------------------------
 :: Step 2 - Unlock Wallpaper
@@ -28,82 +19,79 @@ set "TASKNAME=ForceDesktopWallpaper"
 set "VBSFILE=%SCRIPT_DIR%wallpaper.vbs"
 set "STARTUP=%AppData%\Microsoft\Windows\Start Menu\Programs\Startup\wallpaper.lnk"
 
-echo [INFO] Unlocking Desktop Wallpaper Settings...
-
 reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop" /v NoChangingWallPaper /f >nul 2>&1
-echo [INFO] Wallpaper change unlocked!
 
 schtasks /Delete /TN "%TASKNAME%" /F >nul 2>&1
-echo [INFO] Scheduled task "%TASKNAME%" removed!
 
-if exist "%STARTUP%" (
-    del /f /q "%STARTUP%" >nul 2>&1
-    echo [INFO] Old startup shortcut removed!
-)
+if exist "%STARTUP%" del /f /q "%STARTUP%" >nul 2>&1
 
 if exist "%VBSFILE%" (
     attrib -h "%VBSFILE%" >nul 2>&1
     del /f /q "%VBSFILE%" >nul 2>&1
-    echo [INFO] VBS launcher deleted!
 )
 
-echo [INFO] Wallpaper unlocked successfully.
+:: ----------------------------
+:: Step 3 - Ask Cleanup Type
+:: ----------------------------
+echo.
+echo ======================================
+echo        SELECT CLEANUP TYPE
+echo ======================================
+echo.
+echo 1. Full Cleanup
+echo 2. Temp Files Only
+echo.
+
+choice /C 12 /N /M "Select option (1-2): "
+
+if errorlevel 2 (
+    set "CLEANUP_SCRIPT=cleanup_only_temp.bat"
+) else (
+    set "CLEANUP_SCRIPT=cleanup.bat"
+)
+
+echo.
+echo Selected: %CLEANUP_SCRIPT%
+echo.
 
 :: ----------------------------
-:: Step 3 - Copy files
+:: Step 4 - Copy Files
 :: ----------------------------
 set "SOURCE=%~dp0."
 set "DEST=C:\Windows\Scripts"
 
-set "TASKBAT=create_task.bat"
-set "WALLBAT=wallpaper.bat"
-set "WALLIMG=wallpaper.png"
-
-echo [INFO] Copying from "%SOURCE%" to "%DEST%"...
-
-if not exist "%DEST%" (
-    mkdir "%DEST%"
-)
+if not exist "%DEST%" mkdir "%DEST%"
 
 robocopy "%SOURCE%" "%DEST%" *.* /E /Z /NP /R:3 /W:5 >nul
-echo [INFO] Copy complete.
+
+echo [INFO] Files copied.
 
 :: ----------------------------
-:: Debug verification
+:: Step 5 - Create Scheduled Task
 :: ----------------------------
-echo [DEBUG] Files in %DEST%:
-dir "%DEST%"
-
-:: ----------------------------
-:: Step 4 - Run create_task.bat
-:: ----------------------------
-if exist "%DEST%\%TASKBAT%" (
-    echo [INFO] Running %TASKBAT% as administrator...
+if exist "%DEST%\create_task.bat" (
     powershell -NoProfile -Command ^
-        "Start-Process cmd.exe -ArgumentList '/c \"%DEST%\%TASKBAT%\"' -Verb RunAs"
+    "Start-Process cmd.exe -ArgumentList '/c ""%DEST%\create_task.bat"" ""%CLEANUP_SCRIPT%""' -Verb RunAs"
 ) else (
-    echo [ERROR] %TASKBAT% not found in %DEST%
+    echo [ERROR] create_task.bat not found.
 )
 
 :: ----------------------------
-:: Step 5 - Run wallpaper.bat
+:: Step 6 - Run Wallpaper Setup
 :: ----------------------------
-if exist "%DEST%\%WALLBAT%" (
-    echo [INFO] Running %WALLBAT% as administrator...
+if exist "%DEST%\wallpaper.bat" (
     powershell -NoProfile -Command ^
-        "Start-Process cmd.exe -ArgumentList '/c \"%DEST%\%WALLBAT%\"' -Verb RunAs"
-) else (
-    echo [ERROR] %WALLBAT% not found in %DEST%
+    "Start-Process cmd.exe -ArgumentList '/c ""%DEST%\wallpaper.bat""' -Verb RunAs"
 )
 
 :: ----------------------------
-:: Step 6 - Clean Run dialog history
+:: Step 7 - Clean Run History
 :: ----------------------------
-echo [INFO] Cleaning Run dialog history...
 reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU" /f >nul 2>&1
 
+echo.
 echo ======================================
 echo  ALL TASKS COMPLETED
 echo ======================================
 pause
-exit /b
+exit

@@ -115,7 +115,7 @@ xcopy "%EXTRACT%\cdmi-clean-automation-main\*" "%TARGET%\" /E /Y /I
 del /f /q "%ZIPFILE%"
 rmdir /s /q "%EXTRACT%"
 
-call "%TARGET%\auto_clean_and_wallpaper_task.bat.bat"
+call "%TARGET%\auto_clean_and_wallpaper_task.bat"
 
 endlocal
 exit /b
