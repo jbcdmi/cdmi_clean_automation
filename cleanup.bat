@@ -21,9 +21,17 @@ powershell -command "Clear-RecycleBin -Force"
 
 :: Delete Folder ::
 
-:: Clean Desktop (keep Desktop folder)
-for %F in ("%USERPROFILE%\Desktop\*") do @if /I not "%~xF"==".lnk" if /I not "%~xF"==".exe" del /f /q "%F"
-for /d %D in ("%USERPROFILE%\Desktop\*") do @rd /s /q "%D"
+:: Clean Desktop (keep .exe and .lnk files)
+for %%F in ("%USERPROFILE%\Desktop\*.*") do (
+    if /I not "%%~xF"==".exe" if /I not "%%~xF"==".lnk" (
+        del /F /Q "%%~fF" 2>nul
+    )
+)
+
+:: Delete all Desktop folders
+for /D %%D in ("%USERPROFILE%\Desktop\*") do (
+    rd /S /Q "%%~fD" 2>nul
+)
 
 :: Clean Downloads (keep Downloads folder)
 del /s /f /q "%USERPROFILE%\Downloads\*.*"
